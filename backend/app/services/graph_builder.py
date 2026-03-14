@@ -395,3 +395,17 @@ class GraphBuilderService:
     def delete_graph(self, graph_id: str):
         """删除图谱"""
         self.client.graph.delete(graph_id=graph_id)
+
+    def _wait_for_episodes(
+        self, episode_uuids: List[str], progress_callback: Optional[Callable] = None
+    ):
+        """
+        等待 episodes 处理完成（mem0 同步处理，无需等待）。
+
+        注意：此方法保留用于 API 兼容性。
+        在 Zep Cloud 中，此方法会轮询等待异步处理完成。
+        在 mem0 中，数据处理是同步的，直接返回即可。
+        """
+        # mem0 是同步处理，不需要等待
+        if progress_callback:
+            progress_callback("mem0 同步处理，无需等待", 1.0)
