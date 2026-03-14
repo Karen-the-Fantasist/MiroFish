@@ -22,6 +22,7 @@ def mock_config():
     mock_cfg.LLM_BASE_URL = "http://test.url"
     mock_cfg.EMBEDDING_MODEL = "test_embedding"
     mock_cfg.EMBEDDING_BASE_URL = "http://test.url"
+    mock_cfg.EMBEDDING_API_KEY = "test_embedding_key"
     mock_cfg.USE_MEM0 = True
     sys.modules["backend.app.config"] = mock_cfg
     sys.modules["backend"] = MagicMock()

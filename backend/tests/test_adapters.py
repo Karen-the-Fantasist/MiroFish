@@ -326,9 +326,12 @@ class TestMem0Client:
         """Reset singleton after each test."""
         reset_memory_instance()
 
+    @patch("app.adapters.mem0_client._check_embedding_service", return_value=True)
     @patch("app.adapters.mem0_client.Memory")
     @patch("app.adapters.mem0_client.Config")
-    def test_get_memory_instance_creates_instance(self, mock_config, mock_memory):
+    def test_get_memory_instance_creates_instance(
+        self, mock_config, mock_memory, mock_check
+    ):
         """Test get_memory_instance creates Memory instance with correct config."""
         mock_config.USE_MEM0 = True
         mock_config.LLM_API_KEY = "test-api-key"
@@ -339,6 +342,7 @@ class TestMem0Client:
         mock_config.LLM_BASE_URL = "https://api.openai.com/v1"
         mock_config.EMBEDDING_MODEL = "text-embedding-ada-002"
         mock_config.EMBEDDING_BASE_URL = "https://api.openai.com/v1"
+        mock_config.EMBEDDING_API_KEY = "test-embedding-key"
 
         mock_memory_instance = Mock()
         mock_memory.from_config.return_value = mock_memory_instance
@@ -359,11 +363,13 @@ class TestMem0Client:
         assert config["llm"]["provider"] == "openai"
         assert config["llm"]["config"]["model"] == "gpt-4"
         assert config["embedder"]["provider"] == "openai"
+        assert config["embedder"]["config"]["api_key"] == "test-embedding-key"
         assert config["vector_store"]["provider"] == "qdrant"
 
+    @patch("app.adapters.mem0_client._check_embedding_service", return_value=True)
     @patch("app.adapters.mem0_client.Memory")
     @patch("app.adapters.mem0_client.Config")
-    def test_get_memory_instance_singleton(self, mock_config, mock_memory):
+    def test_get_memory_instance_singleton(self, mock_config, mock_memory, mock_check):
         """Test get_memory_instance returns same instance (singleton)."""
         mock_config.USE_MEM0 = True
         mock_config.LLM_API_KEY = "test-api-key"
@@ -374,6 +380,7 @@ class TestMem0Client:
         mock_config.LLM_BASE_URL = "https://api.openai.com/v1"
         mock_config.EMBEDDING_MODEL = "text-embedding-ada-002"
         mock_config.EMBEDDING_BASE_URL = "https://api.openai.com/v1"
+        mock_config.EMBEDDING_API_KEY = "test-embedding-key"
 
         mock_memory_instance = Mock()
         mock_memory.from_config.return_value = mock_memory_instance
@@ -418,9 +425,10 @@ class TestMem0Client:
         with pytest.raises(RuntimeError, match="NEO4J_PASSWORD 未配置"):
             get_memory_instance()
 
+    @patch("app.adapters.mem0_client._check_embedding_service", return_value=True)
     @patch("app.adapters.mem0_client.Memory")
     @patch("app.adapters.mem0_client.Config")
-    def test_reset_memory_instance(self, mock_config, mock_memory):
+    def test_reset_memory_instance(self, mock_config, mock_memory, mock_check):
         """Test reset_memory_instance clears the singleton."""
         mock_config.USE_MEM0 = True
         mock_config.LLM_API_KEY = "test-api-key"
@@ -431,6 +439,7 @@ class TestMem0Client:
         mock_config.LLM_BASE_URL = "https://api.openai.com/v1"
         mock_config.EMBEDDING_MODEL = "text-embedding-ada-002"
         mock_config.EMBEDDING_BASE_URL = "https://api.openai.com/v1"
+        mock_config.EMBEDDING_API_KEY = "test-embedding-key"
 
         mock_memory_instance = Mock()
         mock_memory.from_config.return_value = mock_memory_instance

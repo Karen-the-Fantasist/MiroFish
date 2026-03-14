@@ -41,6 +41,8 @@ class Config:
     EMBEDDING_BASE_URL = os.environ.get(
         "EMBEDDING_BASE_URL", "http://127.0.0.1:8001/v1"
     )
+    # Embedding API Key（vllm 不验证时可用 "EMPTY"）
+    EMBEDDING_API_KEY = os.environ.get("EMBEDDING_API_KEY", "EMPTY")
 
     # ===========================================
     # Neo4j配置（本地自托管）
