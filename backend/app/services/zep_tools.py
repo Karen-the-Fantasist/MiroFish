@@ -1851,7 +1851,7 @@ class ZepToolsService:
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.3,
-                max_tokens=800,
+                max_tokens=40960,
             )
             return summary
 
