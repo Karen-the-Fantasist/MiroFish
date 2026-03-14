@@ -76,6 +76,7 @@ def get_memory_instance() -> Memory:
 
         # 构建配置
         config = {
+            "version": "v1.1",
             "graph_store": {
                 "provider": "neo4j",
                 "config": {
@@ -91,6 +92,7 @@ def get_memory_instance() -> Memory:
                     "model": Config.LLM_MODEL_NAME,
                     "openai_base_url": Config.LLM_BASE_URL,
                     "api_key": Config.LLM_API_KEY,
+                    "top_p": 0.9,
                 },
             },
             "embedder": {

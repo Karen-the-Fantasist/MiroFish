@@ -455,3 +455,101 @@ class TestMem0Client:
         get_memory_instance()
 
         mock_memory.from_config.assert_called_once()
+
+
+class TestEmbeddingServiceValidation:
+    """测试 Embedding 服务可用性验证。"""
+
+    def setup_method(self):
+        """Reset singleton before each test."""
+        reset_memory_instance()
+
+    def teardown_method(self):
+        """Reset singleton after each test."""
+        reset_memory_instance()
+
+    @patch("app.adapters.mem0_client.requests.get")
+    def test_check_embedding_service_success(self, mock_get):
+        """测试 Embedding 服务可用时返回 True。"""
+        from app.adapters.mem0_client import _check_embedding_service
+
+        mock_response = Mock()
+        mock_response.status_code = 200
+        mock_get.return_value = mock_response
+
+        result = _check_embedding_service("http://127.0.0.1:8001/v1")
+
+        assert result is True
+        mock_get.assert_called_once_with("http://127.0.0.1:8001/v1/models", timeout=5)
+
+    @patch("app.adapters.mem0_client.requests.get")
+    def test_check_embedding_service_failure_status(self, mock_get):
+        """测试 Embedding 服务返回非 200 状态码时返回 False。"""
+        from app.adapters.mem0_client import _check_embedding_service
+
+        mock_response = Mock()
+        mock_response.status_code = 500
+        mock_get.return_value = mock_response
+
+        result = _check_embedding_service("http://127.0.0.1:8001/v1")
+
+        assert result is False
+
+    @patch("app.adapters.mem0_client.requests.get")
+    def test_check_embedding_service_connection_error(self, mock_get):
+        """测试 Embedding 服务连接失败时返回 False。"""
+        from app.adapters.mem0_client import _check_embedding_service
+
+        mock_get.side_effect = Exception("Connection refused")
+
+        result = _check_embedding_service("http://127.0.0.1:8001/v1")
+
+        assert result is False
+
+    @patch("app.adapters.mem0_client.requests.get")
+    def test_check_embedding_service_timeout(self, mock_get):
+        """测试 Embedding 服务超时时返回 False。"""
+        from app.adapters.mem0_client import _check_embedding_service
+
+        import requests
+
+        mock_get.side_effect = requests.Timeout("Connection timed out")
+
+        result = _check_embedding_service("http://127.0.0.1:8001/v1")
+
+        assert result is False
+
+    @patch("app.adapters.mem0_client._check_embedding_service", return_value=False)
+    @patch("app.adapters.mem0_client.Memory")
+    @patch("app.adapters.mem0_client.Config")
+    def test_get_memory_instance_raises_when_embedding_unavailable(
+        self, mock_config, mock_memory, mock_check
+    ):
+        """测试 Embedding 服务不可用时抛出清晰的错误信息。"""
+        mock_config.USE_MEM0 = True
+        mock_config.LLM_API_KEY = "test-api-key"
+        mock_config.NEO4J_PASSWORD = "test-password"
+        mock_config.EMBEDDING_BASE_URL = "http://127.0.0.1:8001/v1"
+
+        with pytest.raises(RuntimeError, match="Embedding 服务不可用"):
+            get_memory_instance()
+
+    @patch("app.adapters.mem0_client._check_embedding_service", return_value=False)
+    @patch("app.adapters.mem0_client.Memory")
+    @patch("app.adapters.mem0_client.Config")
+    def test_get_memory_instance_embedding_error_contains_help(
+        self, mock_config, mock_memory, mock_check
+    ):
+        """测试 Embedding 服务不可用时错误信息包含帮助提示。"""
+        mock_config.USE_MEM0 = True
+        mock_config.LLM_API_KEY = "test-api-key"
+        mock_config.NEO4J_PASSWORD = "test-password"
+        mock_config.EMBEDDING_BASE_URL = "http://127.0.0.1:8001/v1"
+
+        with pytest.raises(RuntimeError) as exc_info:
+            get_memory_instance()
+
+        error_message = str(exc_info.value)
+        # 错误信息应包含帮助提示
+        assert "vllm" in error_message.lower() or "embedding" in error_message.lower()
+        assert "启动" in error_message or "start" in error_message.lower()
