@@ -1,7 +1,6 @@
 """Zep Graph 分页读取工具。
 
-Zep 的 node/edge 列表接口使用 UUID cursor 分页，
-本模块封装自动翻页逻辑（含单页重试），对调用方透明地返回完整列表。
+使用 ZepGraphAdapter 进行分页查询，自动翻页返回完整列表。
 """
 
 from __future__ import annotations
@@ -10,17 +9,16 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from zep_cloud import InternalServerError
-from zep_cloud.client import Zep
+from app.adapters import ZepGraphAdapter
 
 from .logger import get_logger
 
-logger = get_logger('mirofish.zep_paging')
+logger = get_logger("mirofish.zep_paging")
 
 _DEFAULT_PAGE_SIZE = 100
 _MAX_NODES = 2000
 _DEFAULT_MAX_RETRIES = 3
-_DEFAULT_RETRY_DELAY = 2.0  # seconds, doubles each retry
+_DEFAULT_RETRY_DELAY = 2.0
 
 
 def _fetch_page_with_retry(
@@ -41,23 +39,25 @@ def _fetch_page_with_retry(
     for attempt in range(max_retries):
         try:
             return api_call(*args, **kwargs)
-        except (ConnectionError, TimeoutError, OSError, InternalServerError) as e:
+        except (ConnectionError, TimeoutError, OSError) as e:
             last_exception = e
             if attempt < max_retries - 1:
                 logger.warning(
-                    f"Zep {page_description} attempt {attempt + 1} failed: {str(e)[:100]}, retrying in {delay:.1f}s..."
+                    f"{page_description} attempt {attempt + 1} failed: {str(e)[:100]}, retrying in {delay:.1f}s..."
                 )
                 time.sleep(delay)
                 delay *= 2
             else:
-                logger.error(f"Zep {page_description} failed after {max_retries} attempts: {str(e)}")
+                logger.error(
+                    f"{page_description} failed after {max_retries} attempts: {str(e)}"
+                )
 
     assert last_exception is not None
     raise last_exception
 
 
 def fetch_all_nodes(
-    client: Zep,
+    client: ZepGraphAdapter,
     graph_id: str,
     page_size: int = _DEFAULT_PAGE_SIZE,
     max_items: int = _MAX_NODES,
@@ -76,7 +76,7 @@ def fetch_all_nodes(
 
         page_num += 1
         batch = _fetch_page_with_retry(
-            client.graph.node.get_by_graph_id,
+            client.node.get_by_graph_id,
             graph_id,
             max_retries=max_retries,
             retry_delay=retry_delay,
@@ -89,21 +89,25 @@ def fetch_all_nodes(
         all_nodes.extend(batch)
         if len(all_nodes) >= max_items:
             all_nodes = all_nodes[:max_items]
-            logger.warning(f"Node count reached limit ({max_items}), stopping pagination for graph {graph_id}")
+            logger.warning(
+                f"Node count reached limit ({max_items}), stopping pagination for graph {graph_id}"
+            )
             break
         if len(batch) < page_size:
             break
 
         cursor = getattr(batch[-1], "uuid_", None) or getattr(batch[-1], "uuid", None)
         if cursor is None:
-            logger.warning(f"Node missing uuid field, stopping pagination at {len(all_nodes)} nodes")
+            logger.warning(
+                f"Node missing uuid field, stopping pagination at {len(all_nodes)} nodes"
+            )
             break
 
     return all_nodes
 
 
 def fetch_all_edges(
-    client: Zep,
+    client: ZepGraphAdapter,
     graph_id: str,
     page_size: int = _DEFAULT_PAGE_SIZE,
     max_retries: int = _DEFAULT_MAX_RETRIES,
@@ -121,7 +125,7 @@ def fetch_all_edges(
 
         page_num += 1
         batch = _fetch_page_with_retry(
-            client.graph.edge.get_by_graph_id,
+            client.edge.get_by_graph_id,
             graph_id,
             max_retries=max_retries,
             retry_delay=retry_delay,
@@ -137,7 +141,9 @@ def fetch_all_edges(
 
         cursor = getattr(batch[-1], "uuid_", None) or getattr(batch[-1], "uuid", None)
         if cursor is None:
-            logger.warning(f"Edge missing uuid field, stopping pagination at {len(all_edges)} edges")
+            logger.warning(
+                f"Edge missing uuid field, stopping pagination at {len(all_edges)} edges"
+            )
             break
 
     return all_edges
