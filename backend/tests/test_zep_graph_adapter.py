@@ -44,8 +44,10 @@ def mock_neo4j_client():
 def mock_memory():
     """Create mock mem0 Memory instance."""
     mock_mem = MagicMock()
-    mock_mem.add.return_value = [{"id": "test-uuid"}]
-    mock_mem.search.return_value = []
+    mock_mem.add.return_value = {
+        "results": [{"id": "test-uuid", "memory": "test memory", "event": "ADD"}]
+    }
+    mock_mem.search.return_value = {"results": []}
     return mock_mem
 
 
@@ -307,7 +309,11 @@ class TestEdgeGetByGraphId:
 class TestGraphAdd:
     @patch("app.adapters.zep_graph_adapter.get_memory_instance")
     def test_add_returns_uuid(self, mock_get_memory, mock_config, mock_memory):
-        mock_memory.add.return_value = [{"id": "memory-uuid-123"}]
+        mock_memory.add.return_value = {
+            "results": [
+                {"id": "memory-uuid-123", "memory": "test memory", "event": "ADD"}
+            ]
+        }
         mock_get_memory.return_value = mock_memory
 
         from app.adapters.zep_graph_adapter import ZepGraphAdapter
@@ -327,7 +333,7 @@ class TestGraphAdd:
     def test_add_generates_uuid_if_missing(
         self, mock_get_memory, mock_config, mock_memory
     ):
-        mock_memory.add.return_value = [{}]
+        mock_memory.add.return_value = {"results": [{}]}
         mock_get_memory.return_value = mock_memory
 
         from app.adapters.zep_graph_adapter import ZepGraphAdapter
@@ -365,10 +371,12 @@ class TestGraphSearch:
     ):
         from app.adapters.zep_graph_adapter import ZepGraphAdapter, SearchResult
 
-        mock_memory.search.return_value = [
-            {"memory": "Alice works at Google", "score": 0.9},
-            {"memory": "Bob knows Alice", "score": 0.8},
-        ]
+        mock_memory.search.return_value = {
+            "results": [
+                {"memory": "Alice works at Google", "score": 0.9},
+                {"memory": "Bob knows Alice", "score": 0.8},
+            ]
+        }
         mock_get_memory.return_value = mock_memory
         mock_get_neo4j.return_value = mock_neo4j_client
 

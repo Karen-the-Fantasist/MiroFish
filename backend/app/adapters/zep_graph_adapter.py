@@ -283,10 +283,17 @@ class ZepGraphAdapter:
                     user_id=graph_id,
                 )
 
-                # 提取 uuid
+                # 提取 uuid - 兼容 mem0 v1.0.0+ API 格式 {"results": [...]}
                 uuid_ = None
-                if result and isinstance(result, list) and len(result) > 0:
-                    first_result = result[0]
+                if result and isinstance(result, dict):
+                    results_list = result.get("results", [])
+                elif isinstance(result, list):
+                    results_list = result  # 兼容旧版本
+                else:
+                    results_list = []
+
+                if results_list and len(results_list) > 0:
+                    first_result = results_list[0]
                     if isinstance(first_result, dict):
                         uuid_ = first_result.get("id") or first_result.get("uuid")
                     elif hasattr(first_result, "id"):
@@ -328,10 +335,17 @@ class ZepGraphAdapter:
                         user_id=graph_id,
                     )
 
-                    # 提取 uuid
+                    # 提取 uuid - 兼容 mem0 v1.0.0+ API 格式 {"results": [...]}
                     uuid_ = None
-                    if result and isinstance(result, list) and len(result) > 0:
-                        first_result = result[0]
+                    if result and isinstance(result, dict):
+                        results_list = result.get("results", [])
+                    elif isinstance(result, list):
+                        results_list = result  # 兼容旧版本
+                    else:
+                        results_list = []
+
+                    if results_list and len(results_list) > 0:
+                        first_result = results_list[0]
                         if isinstance(first_result, dict):
                             uuid_ = first_result.get("id") or first_result.get("uuid")
                         elif hasattr(first_result, "id"):
@@ -381,18 +395,22 @@ class ZepGraphAdapter:
                 # mem0 搜索
                 search_result = memory.search(query, user_id=graph_id, limit=limit)
 
-                # 解析搜索结果
-                if search_result and isinstance(search_result, list):
-                    for item in search_result:
-                        fact_data = {
-                            "fact": item.get("memory", "")
-                            if isinstance(item, dict)
-                            else str(item),
-                            "score": item.get("score", 0)
-                            if isinstance(item, dict)
-                            else 0,
-                        }
-                        facts.append(fact_data)
+                # 解析搜索结果 - 兼容 mem0 v1.0.0+ API 格式 {"results": [...]}
+                if search_result and isinstance(search_result, dict):
+                    results_list = search_result.get("results", [])
+                elif isinstance(search_result, list):
+                    results_list = search_result  # 兼容旧版本
+                else:
+                    results_list = []
+
+                for item in results_list:
+                    fact_data = {
+                        "fact": item.get("memory", "")
+                        if isinstance(item, dict)
+                        else str(item),
+                        "score": item.get("score", 0) if isinstance(item, dict) else 0,
+                    }
+                    facts.append(fact_data)
 
                 # 从 Neo4j 获取相关的边和节点
                 if scope in ("edges", "both"):
