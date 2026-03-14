@@ -96,17 +96,20 @@ def get_memory_instance() -> Memory:
                 },
             },
             "embedder": {
-                "provider": "openai",
+                "provider": "lmstudio",
                 "config": {
                     "model": Config.EMBEDDING_MODEL,
-                    "openai_base_url": Config.EMBEDDING_BASE_URL,
+                    "lmstudio_base_url": Config.EMBEDDING_BASE_URL,
                     "api_key": Config.EMBEDDING_API_KEY,
+                    "embedding_dims": 2560,
                 },
             },
             "vector_store": {
                 "provider": "qdrant",
                 "config": {
-                    "path": "/tmp/qdrant",
+                    "host": "localhost",
+                    "port": 6333,
+                    "embedding_model_dims": 2560,
                 },
             },
         }

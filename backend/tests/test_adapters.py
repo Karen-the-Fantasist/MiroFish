@@ -362,8 +362,9 @@ class TestMem0Client:
         assert config["graph_store"]["config"]["password"] == "test-password"
         assert config["llm"]["provider"] == "openai"
         assert config["llm"]["config"]["model"] == "gpt-4"
-        assert config["embedder"]["provider"] == "openai"
+        assert config["embedder"]["provider"] == "lmstudio"
         assert config["embedder"]["config"]["api_key"] == "test-embedding-key"
+        assert config["embedder"]["config"]["embedding_dims"] == 2560
         assert config["vector_store"]["provider"] == "qdrant"
 
     @patch("app.adapters.mem0_client._check_embedding_service", return_value=True)

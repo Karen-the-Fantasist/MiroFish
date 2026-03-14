@@ -16,9 +16,6 @@ dependencies = [
     "openai>=1.0.0",
     # Zep Cloud
     "zep-cloud==3.13.0",
-    # OASIS 社交媒体模拟
-    "camel-oasis==0.2.5",
-    "camel-ai==0.2.78",
     # 文件处理
     "PyMuPDF>=1.24.0",
     # 编码检测（支持非UTF-8编码的文本文件）
@@ -27,8 +24,10 @@ dependencies = [
     # 工具库
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
-    "mem0ai[graph]>=0.1.37",
-    "neo4j>=5.23.0",
+    # mem0 记忆层
+    "mem0ai[graph]>=1.0",
+    "qdrant-client>=1.10",
+    "neo4j>=5.23.1,<6.0",
 ]
 
 [project.optional-dependencies]
