@@ -94,6 +94,9 @@ class EdgeInfo:
     valid_at: Optional[str] = None
     invalid_at: Optional[str] = None
     expired_at: Optional[str] = None
+    # 额外属性
+    attributes: Dict[str, Any] = field(default_factory=dict)
+    episodes: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -108,6 +111,8 @@ class EdgeInfo:
             "valid_at": self.valid_at,
             "invalid_at": self.invalid_at,
             "expired_at": self.expired_at,
+            "attributes": self.attributes,
+            "episodes": self.episodes,
         }
 
     def to_text(self, include_temporal: bool = False) -> str:
@@ -793,6 +798,9 @@ class ZepToolsService:
                 edge_info.valid_at = getattr(edge, "valid_at", None)
                 edge_info.invalid_at = getattr(edge, "invalid_at", None)
                 edge_info.expired_at = getattr(edge, "expired_at", None)
+
+            edge_info.attributes = getattr(edge, "attributes", None) or {}
+            edge_info.episodes = getattr(edge, "episodes", None) or []
 
             result.append(edge_info)
 

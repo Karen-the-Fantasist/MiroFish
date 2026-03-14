@@ -484,6 +484,8 @@ class ZepGraphAdapter:
                         valid_at=props.get("valid_at"),
                         invalid_at=props.get("invalid_at"),
                         expired_at=props.get("expired_at"),
+                        attributes=props.get("attributes") or {},
+                        episodes=props.get("episodes") or [],
                     )
                     edges.append(edge)
 
@@ -667,6 +669,8 @@ class ZepGraphAdapter:
                     valid_at=edge_dict.get("valid_at"),
                     invalid_at=edge_dict.get("invalid_at"),
                     expired_at=edge_dict.get("expired_at"),
+                    attributes=edge_dict.get("attributes") or {},
+                    episodes=edge_dict.get("episodes") or [],
                 )
                 edges.append(edge)
 

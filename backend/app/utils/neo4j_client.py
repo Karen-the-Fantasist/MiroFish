@@ -56,6 +56,8 @@ class EdgeInfo:
     valid_at: str | None = None
     invalid_at: str | None = None
     expired_at: str | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
+    episodes: list[str] = field(default_factory=list)
 
 
 class Neo4jClient:
@@ -312,6 +314,8 @@ class Neo4jClient:
                     valid_at=props.get("valid_at"),
                     invalid_at=props.get("invalid_at"),
                     expired_at=props.get("expired_at"),
+                    attributes=props.get("attributes") or {},
+                    episodes=props.get("episodes") or [],
                 )
                 all_edges.append(edge)
 
@@ -369,6 +373,8 @@ class Neo4jClient:
                 "valid_at": props.get("valid_at"),
                 "invalid_at": props.get("invalid_at"),
                 "expired_at": props.get("expired_at"),
+                "attributes": props.get("attributes") or {},
+                "episodes": props.get("episodes") or [],
             }
             edges.append(edge_info)
 
