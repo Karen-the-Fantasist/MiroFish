@@ -278,10 +278,25 @@ class ZepGraphAdapter:
             memory = self._adapter._get_memory()
 
             try:
+                logger.debug(
+                    f"调用 memory.add, user_id={graph_id}, data长度={len(data)}"
+                )
                 result = memory.add(
                     [{"role": "user", "content": data}],
                     user_id=graph_id,
                 )
+                logger.debug(
+                    f"memory.add 返回: {type(result)}, keys={result.keys() if isinstance(result, dict) else 'N/A'}"
+                )
+
+                if isinstance(result, dict):
+                    results_list = result.get("results", [])
+                    relations = result.get("relations", [])
+                    logger.debug(
+                        f"  results: {len(results_list)} 条, relations: {len(relations) if relations else 0} 条"
+                    )
+                    if relations:
+                        logger.debug(f"  relations 内容: {relations[:2]}...")
 
                 # 提取 uuid - 兼容 mem0 v1.0.0+ API 格式 {"results": [...]}
                 uuid_ = None
@@ -327,13 +342,24 @@ class ZepGraphAdapter:
             """
             memory = self._adapter._get_memory()
             results = []
+            total_relations = 0
 
-            for episode in episodes:
+            for i, episode in enumerate(episodes):
                 try:
+                    logger.debug(
+                        f"批量添加 [{i + 1}/{len(episodes)}]: user_id={graph_id}, data长度={len(episode.data)}"
+                    )
                     result = memory.add(
                         [{"role": "user", "content": episode.data}],
                         user_id=graph_id,
                     )
+
+                    if isinstance(result, dict):
+                        results_list = result.get("results", [])
+                        relations = result.get("relations", [])
+                        if relations:
+                            logger.debug(f"  返回 relations: {len(relations)} 条图关系")
+                            total_relations += len(relations)
 
                     # 提取 uuid - 兼容 mem0 v1.0.0+ API 格式 {"results": [...]}
                     uuid_ = None
@@ -359,7 +385,9 @@ class ZepGraphAdapter:
                     logger.error(f"批量添加中单个数据失败: {e}")
                     results.append({"uuid": str(uuid.uuid4()), "error": str(e)})
 
-            logger.info(f"批量添加 {len(episodes)} 条数据到图谱 {graph_id}")
+            logger.info(
+                f"批量添加 {len(episodes)} 条数据到图谱 {graph_id}, 共生成 {total_relations} 条图关系"
+            )
             return results
 
         def search(

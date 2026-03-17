@@ -174,7 +174,7 @@ class Neo4jClient:
         """分页获取图谱节点。
 
         Args:
-            graph_id: 图谱 ID
+            graph_id: 图谱 ID（mem0 使用 user_id）
             limit: 最大返回节点数
             cursor: UUID 分页游标（可选）
             page_size: 每页大小
@@ -187,12 +187,12 @@ class Neo4jClient:
         page_num = 0
 
         while len(all_nodes) < limit:
-            # 构建 Cypher 查询（参数化防止注入）
             query = """
-                MATCH (n:Entity {graph_id: $graph_id})
-                WHERE $cursor IS NULL OR n.uuid > $cursor
+                MATCH (n)
+                WHERE n.user_id = $graph_id
+                AND ($cursor IS NULL OR n.created > $cursor)
                 RETURN n
-                ORDER BY n.uuid
+                ORDER BY n.created
                 LIMIT $page_size
             """
 
@@ -219,7 +219,7 @@ class Neo4jClient:
                     props = dict(node_data)
 
                 node = EntityNode(
-                    uuid=props.get("uuid", ""),
+                    uuid=props.get("uuid", props.get("name", "")),
                     name=props.get("name", ""),
                     labels=list(getattr(node_data, "_labels", []))
                     if hasattr(node_data, "_labels")
@@ -228,7 +228,7 @@ class Neo4jClient:
                     attributes={
                         k: v
                         for k, v in props.items()
-                        if k not in ("uuid", "name", "summary", "graph_id")
+                        if k not in ("uuid", "name", "summary", "user_id", "graph_id")
                     },
                 )
                 all_nodes.append(node)
@@ -236,9 +236,9 @@ class Neo4jClient:
             if records:
                 last_record = records[-1].get("n", {})
                 if hasattr(last_record, "_properties"):
-                    current_cursor = last_record._properties.get("uuid")
+                    current_cursor = last_record._properties.get("created")
                 else:
-                    current_cursor = last_record.get("uuid")
+                    current_cursor = last_record.get("created")
 
             if len(records) < page_size:
                 break
@@ -256,7 +256,7 @@ class Neo4jClient:
         """分页获取图谱所有边。
 
         Args:
-            graph_id: 图谱 ID
+            graph_id: 图谱 ID（mem0 使用 user_id）
             limit: 最大返回边数
             cursor: UUID 分页游标（可选）
             page_size: 每页大小
@@ -269,14 +269,18 @@ class Neo4jClient:
         page_num = 0
 
         while len(all_edges) < limit:
-            # 构建 Cypher 查询（参数化防止注入）
             query = """
                 MATCH (source)-[r]->(target)
-                WHERE r.graph_id = $graph_id
-                AND ($cursor IS NULL OR r.uuid > $cursor)
-                RETURN r, source.uuid as source_uuid, source.name as source_name,
-                       target.uuid as target_uuid, target.name as target_name
-                ORDER BY r.uuid
+                WHERE source.user_id = $graph_id
+                AND target.user_id = $graph_id
+                AND ($cursor IS NULL OR r.created > $cursor)
+                RETURN r, 
+                       source.name as source_name, 
+                       source.user_id as source_user_id,
+                       target.name as target_name,
+                       target.user_id as target_user_id,
+                       type(r) as relationship_type
+                ORDER BY r.created
                 LIMIT $page_size
             """
 
@@ -304,17 +308,21 @@ class Neo4jClient:
 
                 edge = EdgeInfo(
                     uuid=props.get("uuid", ""),
-                    name=props.get("name", ""),
+                    name=record.get("relationship_type", ""),
                     fact=props.get("fact", ""),
-                    source_node_uuid=record.get("source_uuid", ""),
-                    target_node_uuid=record.get("target_uuid", ""),
+                    source_node_uuid=record.get("source_name", ""),
+                    target_node_uuid=record.get("target_name", ""),
                     source_node_name=record.get("source_name"),
                     target_node_name=record.get("target_name"),
-                    created_at=props.get("created_at"),
+                    created_at=props.get("created"),
                     valid_at=props.get("valid_at"),
                     invalid_at=props.get("invalid_at"),
                     expired_at=props.get("expired_at"),
-                    attributes=props.get("attributes") or {},
+                    attributes={
+                        k: v
+                        for k, v in props.items()
+                        if k not in ("uuid", "created", "mentions")
+                    },
                     episodes=props.get("episodes") or [],
                 )
                 all_edges.append(edge)
@@ -322,9 +330,9 @@ class Neo4jClient:
             if records:
                 last_record = records[-1].get("r", {})
                 if hasattr(last_record, "_properties"):
-                    current_cursor = last_record._properties.get("uuid")
+                    current_cursor = last_record._properties.get("created")
                 else:
-                    current_cursor = last_record.get("uuid")
+                    current_cursor = last_record.get("created")
 
             if len(records) < page_size:
                 break
