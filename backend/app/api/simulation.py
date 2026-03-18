@@ -341,6 +341,11 @@ def _check_simulation_prepared(simulation_id: str) -> tuple:
             }
 
     except Exception as e:
+        logger.warning(
+            f"[FALLBACK] _check_simulation_prepared fallback behavior | "
+            f"simulation_id={simulation_id} | "
+            f"exception={type(e).__name__}: {str(e)[:200]}"
+        )
         return False, {"reason": f"读取状态文件失败: {str(e)}"}
 
 
@@ -477,7 +482,11 @@ def prepare_simulation():
                 f"预期实体数量: {filtered_preview.filtered_count}, 类型: {filtered_preview.entity_types}"
             )
         except Exception as e:
-            logger.warning(f"同步获取实体数量失败（将在后台任务中重试）: {e}")
+            logger.warning(
+                f"[FALLBACK] prepare_simulation entity count fallback behavior | "
+                f"simulation_id={simulation_id}, graph_id={state.graph_id} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             # 失败不影响后续流程，后台任务会重新获取
 
         # 创建异步任务
@@ -836,7 +845,12 @@ def _get_report_id_for_simulation(simulation_id: str) -> str:
                             "status": meta.get("status", ""),
                         }
                     )
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    f"[FALLBACK] _get_report_id_for_simulation inner loop fallback behavior | "
+                    f"report_folder={report_folder}, simulation_id={simulation_id} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
                 continue
 
         if not matching_reports:
@@ -847,7 +861,11 @@ def _get_report_id_for_simulation(simulation_id: str) -> str:
         return matching_reports[0].get("report_id")
 
     except Exception as e:
-        logger.warning(f"查找 simulation {simulation_id} 的 report 失败: {e}")
+        logger.warning(
+            f"[FALLBACK] _get_report_id_for_simulation fallback behavior | "
+            f"simulation_id={simulation_id} | "
+            f"exception={type(e).__name__}: {str(e)[:200]}"
+        )
         return None
 
 
@@ -954,7 +972,12 @@ def get_simulation_history():
             try:
                 created_date = sim_dict.get("created_at", "")[:10]
                 sim_dict["created_date"] = created_date
-            except:
+            except Exception as e:
+                logger.warning(
+                    f"[FALLBACK] get_simulation_history date format fallback behavior | "
+                    f"simulation_id={sim.simulation_id}, created_at={sim_dict.get('created_at')} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
                 sim_dict["created_date"] = ""
 
             enriched_simulations.append(sim_dict)
@@ -1077,7 +1100,11 @@ def get_simulation_profiles_realtime(simulation_id: str):
                         reader = csv.DictReader(f)
                         profiles = list(reader)
             except (json.JSONDecodeError, Exception) as e:
-                logger.warning(f"读取 profiles 文件失败（可能正在写入中）: {e}")
+                logger.warning(
+                    f"[FALLBACK] get_simulation_profiles_realtime profiles fallback behavior | "
+                    f"simulation_id={simulation_id}, platform={platform}, file={profiles_file} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
                 profiles = []
 
         # 检查是否正在生成（通过 state.json 判断）
@@ -1092,7 +1119,12 @@ def get_simulation_profiles_realtime(simulation_id: str):
                     status = state_data.get("status", "")
                     is_generating = status == "preparing"
                     total_expected = state_data.get("entities_count")
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    f"[FALLBACK] get_simulation_profiles_realtime state fallback behavior | "
+                    f"simulation_id={simulation_id}, state_file={state_file} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
                 pass
 
         return jsonify(
@@ -1171,7 +1203,11 @@ def get_simulation_config_realtime(simulation_id: str):
                 with open(config_file, "r", encoding="utf-8") as f:
                     config = json.load(f)
             except (json.JSONDecodeError, Exception) as e:
-                logger.warning(f"读取 config 文件失败（可能正在写入中）: {e}")
+                logger.warning(
+                    f"[FALLBACK] get_simulation_config_realtime config fallback behavior | "
+                    f"simulation_id={simulation_id}, config_file={config_file} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
                 config = None
 
         # 检查是否正在生成（通过 state.json 判断）
@@ -1196,7 +1232,12 @@ def get_simulation_config_realtime(simulation_id: str):
                             generation_stage = "generating_profiles"
                     elif status == "ready":
                         generation_stage = "completed"
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    f"[FALLBACK] get_simulation_config_realtime state fallback behavior | "
+                    f"simulation_id={simulation_id}, state_file={state_file} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
                 pass
 
         # 构建返回数据
@@ -1515,7 +1556,11 @@ def start_simulation():
                             try:
                                 SimulationRunner.stop_simulation(simulation_id)
                             except Exception as e:
-                                logger.warning(f"停止模拟时出现警告: {str(e)}")
+                                logger.warning(
+                                    f"[FALLBACK] start_simulation stop fallback behavior | "
+                                    f"simulation_id={simulation_id} | "
+                                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                                )
                         else:
                             return jsonify(
                                 {
@@ -1991,7 +2036,12 @@ def get_simulation_posts(simulation_id: str):
             cursor.execute("SELECT COUNT(*) FROM post")
             total = cursor.fetchone()[0]
 
-        except sqlite3.OperationalError:
+        except sqlite3.OperationalError as e:
+            logger.warning(
+                f"[FALLBACK] get_simulation_posts SQLite fallback behavior | "
+                f"simulation_id={simulation_id}, platform={platform}, db_path={db_path} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             posts = []
             total = 0
 
@@ -2069,7 +2119,12 @@ def get_simulation_comments(simulation_id: str):
 
             comments = [dict(row) for row in cursor.fetchall()]
 
-        except sqlite3.OperationalError:
+        except sqlite3.OperationalError as e:
+            logger.warning(
+                f"[FALLBACK] get_simulation_comments SQLite fallback behavior | "
+                f"simulation_id={simulation_id}, post_id={post_id}, db_path={db_path} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             comments = []
 
         conn.close()

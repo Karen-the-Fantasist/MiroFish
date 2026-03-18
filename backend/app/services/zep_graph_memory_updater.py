@@ -430,11 +430,19 @@ class ZepGraphMemoryUpdater:
             except Exception as e:
                 if attempt < self.MAX_RETRIES - 1:
                     logger.warning(
-                        f"批量发送到Zep失败 (尝试 {attempt + 1}/{self.MAX_RETRIES}): {e}"
+                        f"[FALLBACK] _send_batch_activities 重试中 | "
+                        f"attempt={attempt + 1}/{self.MAX_RETRIES}, "
+                        f"graph_id={self.graph_id}, platform={platform}, activities_count={len(activities)} | "
+                        f"exception={type(e).__name__}: {str(e)[:200]}"
                     )
                     time.sleep(self.RETRY_DELAY * (attempt + 1))
                 else:
-                    logger.error(f"批量发送到Zep失败，已重试{self.MAX_RETRIES}次: {e}")
+                    logger.error(
+                        f"[FALLBACK] _send_batch_activities 最终失败，批次丢失 | "
+                        f"graph_id={self.graph_id}, platform={platform}, activities_count={len(activities)}, "
+                        f"combined_text_len={len(combined_text) if combined_text else 0} | "
+                        f"exception={type(e).__name__}: {str(e)[:200]}"
+                    )
                     self._failed_count += 1
 
     def _flush_remaining(self):
@@ -549,7 +557,9 @@ class ZepGraphMemoryManager:
                         updater.stop()
                     except Exception as e:
                         logger.error(
-                            f"停止更新器失败: simulation_id={simulation_id}, error={e}"
+                            f"[FALLBACK] stop_all 跳过更新器停止失败 | "
+                            f"simulation_id={simulation_id} | "
+                            f"exception={type(e).__name__}: {str(e)[:200]}"
                         )
                 cls._updaters.clear()
             logger.info("已停止所有图谱记忆更新器")

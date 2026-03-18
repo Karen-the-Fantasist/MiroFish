@@ -210,7 +210,11 @@ class ZepEntityReader:
 
             return edges_data
         except Exception as e:
-            logger.warning(f"获取节点 {node_uuid} 的边失败: {str(e)}")
+            logger.warning(
+                f"[FALLBACK] get_node_edges 返回空列表 | "
+                f"node_uuid={node_uuid} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             return []
 
     def filter_defined_entities(
@@ -421,7 +425,11 @@ class ZepEntityReader:
             )
 
         except Exception as e:
-            logger.error(f"获取实体 {entity_uuid} 失败: {str(e)}")
+            logger.error(
+                f"[FALLBACK] get_entity_with_context 返回 None | "
+                f"graph_id={graph_id}, entity_uuid={entity_uuid} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             return None
 
     def get_entities_by_type(

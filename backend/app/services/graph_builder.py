@@ -11,8 +11,11 @@ from typing import Any, Callable, Dict, List, Optional
 
 from app.adapters import ZepGraphAdapter
 from app.adapters.zep_graph_adapter import EpisodeData
+from app.utils.logger import get_logger
 
 from ..models.task import TaskManager, TaskStatus
+
+logger = get_logger("mirofish.graph_builder")
 from ..utils.zep_paging import fetch_all_edges, fetch_all_nodes
 from .text_processor import TextProcessor
 
@@ -77,6 +80,11 @@ class GraphBuilderService:
         Returns:
             任务ID
         """
+        # 入口日志
+        logger.info(
+            f"[GRAPH_BUILD] 入口: graph_name={graph_name}, text_len={len(text)}, chunk_size={chunk_size}, batch_size={batch_size}"
+        )
+
         # 创建任务
         task_id = self.task_manager.create_task(
             task_type="graph_build",
@@ -86,6 +94,7 @@ class GraphBuilderService:
                 "text_length": len(text),
             },
         )
+        logger.debug(f"[GRAPH_BUILD] 创建任务: task_id={task_id}")
 
         # 在后台线程中执行构建
         thread = threading.Thread(
@@ -116,6 +125,7 @@ class GraphBuilderService:
         batch_size: int,
     ):
         """图谱构建工作线程"""
+        logger.info(f"[GRAPH_BUILD_WORKER] 开始: task_id={task_id}")
         try:
             self.task_manager.update_task(
                 task_id,
@@ -125,23 +135,31 @@ class GraphBuilderService:
             )
 
             # 1. 创建图谱
+            logger.debug("[GRAPH_BUILD_WORKER] 步骤 1/5: 创建图谱")
             graph_id = self.create_graph(graph_name)
             self.task_manager.update_task(
                 task_id, progress=10, message=f"图谱已创建: {graph_id}"
             )
 
             # 2. 设置本体
+            logger.debug(
+                f"[GRAPH_BUILD_WORKER] 步骤 2/5: 设置本体, entity_types={len(ontology.get('entity_types', []))}"
+            )
             self.set_ontology(graph_id, ontology)
             self.task_manager.update_task(task_id, progress=15, message="本体已设置")
 
             # 3. 文本分块
             chunks = TextProcessor.split_text(text, chunk_size, chunk_overlap)
             total_chunks = len(chunks)
+            logger.debug(
+                f"[GRAPH_BUILD_WORKER] 步骤 3/5: 文本分块, chunks={len(chunks)}"
+            )
             self.task_manager.update_task(
                 task_id, progress=20, message=f"文本已分割为 {total_chunks} 个块"
             )
 
             # 4. 分批发送数据
+            logger.debug("[GRAPH_BUILD_WORKER] 步骤 4/5: 添加数据批次")
             self.add_text_batches(
                 graph_id,
                 chunks,
@@ -154,6 +172,7 @@ class GraphBuilderService:
             )
 
             # 5. 获取图谱信息
+            logger.debug("[GRAPH_BUILD_WORKER] 步骤 5/5: 获取图谱信息")
             self.task_manager.update_task(
                 task_id, progress=90, message="获取图谱信息..."
             )
@@ -161,6 +180,9 @@ class GraphBuilderService:
             graph_info = self._get_graph_info(graph_id)
 
             # 完成
+            logger.info(
+                f"[GRAPH_BUILD_WORKER] 完成: task_id={task_id}, graph_id={graph_id}, nodes={graph_info.node_count}, edges={graph_info.edge_count}"
+            )
             self.task_manager.complete_task(
                 task_id,
                 {
@@ -171,6 +193,10 @@ class GraphBuilderService:
             )
 
         except Exception as e:
+            logger.error(
+                f"[GRAPH_BUILD_WORKER] 失败: task_id={task_id}, error={e!r}",
+                exc_info=True,
+            )
             import traceback
 
             error_msg = f"{str(e)}\n{traceback.format_exc()}"
@@ -178,16 +204,29 @@ class GraphBuilderService:
 
     def create_graph(self, name: str) -> str:
         """创建Zep图谱（公开方法）"""
-        graph_id = f"mirofish_{uuid.uuid4().hex[:16]}"
+        logger.info(f"[CREATE_GRAPH] 入口: name={name}")
+        try:
+            graph_id = f"mirofish_{uuid.uuid4().hex[:16]}"
 
-        self.client.graph.create(
-            graph_id=graph_id, name=name, description="MiroFish Social Simulation Graph"
-        )
+            self.client.graph.create(
+                graph_id=graph_id,
+                name=name,
+                description="MiroFish Social Simulation Graph",
+            )
 
-        return graph_id
+            logger.info(f"[CREATE_GRAPH] 出口: graph_id={graph_id}")
+            return graph_id
+        except Exception as e:
+            logger.error(
+                f"[CREATE_GRAPH] 失败: name={name}, error={e!r}", exc_info=True
+            )
+            raise
 
     def set_ontology(self, graph_id: str, ontology: Dict[str, Any]):
         """设置图谱本体（公开方法）"""
+        logger.info(
+            f"[SET_ONTOLOGY] 入口: graph_id={graph_id}, entity_types={len(ontology.get('entity_types', []))}, edge_types={len(ontology.get('edge_types', []))}"
+        )
         RESERVED_NAMES = {
             "uuid",
             "name",
@@ -234,6 +273,7 @@ class GraphBuilderService:
                 entities=entity_types if entity_types else None,
                 edges=edge_definitions if edge_definitions else None,
             )
+        logger.debug(f"[SET_ONTOLOGY] 完成: graph_id={graph_id}")
 
     def add_text_batches(
         self,
@@ -243,6 +283,9 @@ class GraphBuilderService:
         progress_callback: Optional[Callable] = None,
     ) -> List[str]:
         """分批添加文本到图谱，返回所有 episode 的 uuid 列表"""
+        logger.info(
+            f"[ADD_BATCHES] 入口: graph_id={graph_id}, total_chunks={len(chunks)}, batch_size={batch_size}"
+        )
         episode_uuids = []
         total_chunks = len(chunks)
 
@@ -250,6 +293,10 @@ class GraphBuilderService:
             batch_chunks = chunks[i : i + batch_size]
             batch_num = i // batch_size + 1
             total_batches = (total_chunks + batch_size - 1) // batch_size
+
+            logger.debug(
+                f"[ADD_BATCHES] 批次 [{batch_num}/{total_batches}]: 处理 {len(batch_chunks)} 块"
+            )
 
             if progress_callback:
                 progress = (i + len(batch_chunks)) / total_chunks
@@ -267,6 +314,10 @@ class GraphBuilderService:
                     graph_id=graph_id, episodes=episodes
                 )
 
+                logger.debug(
+                    f"[ADD_BATCHES] 批次 [{batch_num}] 结果: {len(batch_result)} 条"
+                )
+
                 # 收集返回的 episode uuid
                 if batch_result and isinstance(batch_result, list):
                     for ep in batch_result:
@@ -280,14 +331,21 @@ class GraphBuilderService:
                 time.sleep(1)
 
             except Exception as e:
+                logger.error(
+                    f"[ADD_BATCHES] 批次 [{batch_num}] 失败: {e!r}", exc_info=True
+                )
                 if progress_callback:
                     progress_callback(f"批次 {batch_num} 发送失败: {str(e)}", 0)
                 raise
 
+        logger.info(
+            f"[ADD_BATCHES] 出口: graph_id={graph_id}, total_episodes={len(episode_uuids)}"
+        )
         return episode_uuids
 
     def _get_graph_info(self, graph_id: str) -> GraphInfo:
         """获取图谱信息"""
+        logger.debug(f"[GET_GRAPH_INFO] 入口: graph_id={graph_id}")
         # 获取节点（分页）
         nodes = fetch_all_nodes(self.client, graph_id)
 
@@ -302,6 +360,9 @@ class GraphBuilderService:
                     if label not in ["Entity", "Node"]:
                         entity_types.add(label)
 
+        logger.info(
+            f"[GET_GRAPH_INFO] 出口: graph_id={graph_id}, nodes={len(nodes)}, edges={len(edges)}, entity_types={entity_types}"
+        )
         return GraphInfo(
             graph_id=graph_id,
             node_count=len(nodes),
@@ -319,6 +380,7 @@ class GraphBuilderService:
         Returns:
             包含nodes和edges的字典，包括时间信息、属性等详细数据
         """
+        logger.info(f"[GET_GRAPH_DATA] 入口: graph_id={graph_id}")
         nodes = fetch_all_nodes(self.client, graph_id)
         edges = fetch_all_edges(self.client, graph_id)
 
@@ -384,6 +446,9 @@ class GraphBuilderService:
                 }
             )
 
+        logger.info(
+            f"[GET_GRAPH_DATA] 出口: graph_id={graph_id}, nodes={len(nodes_data)}, edges={len(edges_data)}"
+        )
         return {
             "graph_id": graph_id,
             "nodes": nodes_data,
@@ -394,7 +459,9 @@ class GraphBuilderService:
 
     def delete_graph(self, graph_id: str):
         """删除图谱"""
+        logger.info(f"[DELETE_GRAPH] 入口: graph_id={graph_id}")
         self.client.graph.delete(graph_id=graph_id)
+        logger.info(f"[DELETE_GRAPH] 完成: graph_id={graph_id}")
 
     def _wait_for_episodes(
         self, episode_uuids: List[str], progress_callback: Optional[Callable] = None

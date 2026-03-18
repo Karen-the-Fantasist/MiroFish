@@ -3,6 +3,7 @@ Mem0 客户端封装
 提供单例模式的 Memory 实例，支持延迟初始化
 """
 
+import json
 import logging
 import threading
 from typing import Optional
@@ -12,8 +13,9 @@ import requests
 from mem0 import Memory
 
 from app.config import Config
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("mirofish.mem0_client")
 
 # 单例实例和锁
 _memory_instance: Optional[Memory] = None
@@ -22,10 +24,15 @@ _lock = threading.Lock()
 
 def _check_embedding_service(base_url: str, timeout: int = 5) -> bool:
     """验证 Embedding 服务是否可用"""
+    logger.debug(f"[EMBEDDING_CHECK] 检查 Embedding 服务: {base_url}")
     try:
         response = requests.get(f"{base_url.rstrip('/')}/models", timeout=timeout)
-        return response.status_code == 200
-    except Exception:
+        if response.status_code == 200:
+            logger.info(f"[EMBEDDING_CHECK] Embedding 服务可用: {base_url}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"[EMBEDDING_CHECK] Embedding 服务不可用: {base_url}, 错误: {e!r}")
         return False
 
 
@@ -72,7 +79,16 @@ def get_memory_instance() -> Memory:
                 "或设置 EMBEDDING_BASE_URL 指向可用的 Embedding 服务"
             )
 
-        logger.info("初始化 mem0 Memory 实例...")
+        logger.info(f"[MEM0_INIT] 开始初始化 mem0 Memory 实例")
+        logger.debug(
+            f"[MEM0_INIT] 配置详情: LLM={Config.LLM_MODEL_NAME}, LLM_URL={Config.LLM_BASE_URL}"
+        )
+        logger.debug(
+            f"[MEM0_INIT] 配置详情: EMBEDDING={Config.EMBEDDING_MODEL}, EMBEDDING_URL={Config.EMBEDDING_BASE_URL}"
+        )
+        logger.debug(
+            f"[MEM0_INIT] 配置详情: NEO4J={Config.NEO4J_URL}, NEO4J_USER={Config.NEO4J_USERNAME}"
+        )
 
         # 构建配置
         config = {
@@ -114,8 +130,25 @@ def get_memory_instance() -> Memory:
             },
         }
 
-        _memory_instance = Memory.from_config(config)
-        logger.info("mem0 Memory 实例初始化完成")
+        logger.debug(
+            f"[MEM0_INIT] mem0 config: {json.dumps(config, indent=2, default=str)}"
+        )
+
+        try:
+            _memory_instance = Memory.from_config(config)
+            logger.info(f"[MEM0_INIT] mem0 Memory 实例初始化成功")
+        except Exception as e:
+            logger.error(f"[MEM0_INIT] mem0 初始化失败: {e!r}", exc_info=True)
+            raise
+
+        # 验证 graph_store 是否正确初始化
+        logger.debug(
+            f"  graph_store.config: {_memory_instance.config.graph_store.config}"
+        )
+        logger.debug(f"  enable_graph: {_memory_instance.enable_graph}")
+        logger.debug(
+            f"  graph type: {type(_memory_instance.graph) if _memory_instance.graph else None}"
+        )
 
         return _memory_instance
 
@@ -128,6 +161,7 @@ def reset_memory_instance() -> None:
     """
     global _memory_instance
 
+    logger.info(f"[MEM0_RESET] 重置 mem0 Memory 实例")
     with _lock:
         _memory_instance = None
-        logger.info("mem0 Memory 实例已重置")
+        logger.info(f"[MEM0_RESET] mem0 Memory 实例已重置")

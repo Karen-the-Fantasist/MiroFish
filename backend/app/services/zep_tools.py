@@ -576,7 +576,11 @@ class ZepToolsService:
             )
 
         except Exception as e:
-            logger.warning(f"ZepGraphAdapter Search API失败，降级为本地搜索: {str(e)}")
+            logger.warning(
+                f"[FALLBACK] search_graph 降级为本地搜索 | "
+                f"graph_id={graph_id}, query={query[:100] if query else None}, limit={limit}, scope={scope} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             # 降级：使用本地关键词匹配搜索
             return self._local_search(graph_id, query, limit, scope)
 
@@ -678,7 +682,11 @@ class ZepToolsService:
             logger.info(f"本地搜索完成: 找到 {len(facts)} 条相关事实")
 
         except Exception as e:
-            logger.error(f"本地搜索失败: {str(e)}")
+            logger.error(
+                f"[FALLBACK] _local_search 返回空结果 | "
+                f"graph_id={graph_id}, query={query[:100] if query else None}, limit={limit}, scope={scope} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
 
         return SearchResult(
             facts=facts,
@@ -836,7 +844,11 @@ class ZepToolsService:
                 attributes=dict(node.attributes) if node.attributes else {},
             )
         except Exception as e:
-            logger.error(f"获取节点详情失败: {str(e)}")
+            logger.error(
+                f"[FALLBACK] get_node_detail 返回 None | "
+                f"node_uuid={node_uuid} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             return None
 
     def get_node_edges(self, graph_id: str, node_uuid: str) -> List[EdgeInfo]:
@@ -871,7 +883,11 @@ class ZepToolsService:
             return result
 
         except Exception as e:
-            logger.warning(f"获取节点边失败: {str(e)}")
+            logger.warning(
+                f"[FALLBACK] get_node_edges 返回空列表 | "
+                f"graph_id={graph_id}, node_uuid={node_uuid} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             return []
 
     def get_entities_by_type(self, graph_id: str, entity_type: str) -> List[NodeInfo]:
@@ -1141,7 +1157,11 @@ class ZepToolsService:
                         }
                     )
             except Exception as e:
-                logger.debug(f"获取节点 {uuid} 失败: {e}")
+                logger.debug(
+                    f"[FALLBACK] insight_forge 跳过节点 | "
+                    f"uuid={uuid}, entity_type={entity_type} | "
+                    f"exception={type(e).__name__}: {str(e)[:100]}"
+                )
                 continue
 
         result.entity_insights = entity_insights
@@ -1220,7 +1240,11 @@ class ZepToolsService:
             return [str(sq) for sq in sub_queries[:max_queries]]
 
         except Exception as e:
-            logger.warning(f"生成子问题失败: {str(e)}，使用默认子问题")
+            logger.warning(
+                f"[FALLBACK] _generate_sub_queries 使用默认子问题 | "
+                f"query={query[:100] if query else None}, max_queries={max_queries} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             # 降级：返回基于原问题的变体
             return [
                 query,
@@ -1578,13 +1602,21 @@ class ZepToolsService:
 
         except ValueError as e:
             # 模拟环境未运行
-            logger.warning(f"采访API调用失败（环境未运行？）: {e}")
+            logger.warning(
+                f"[FALLBACK] interview_agents 环境未运行 | "
+                f"simulation_id={simulation_id}, interview_requirement={interview_requirement[:100] if interview_requirement else None} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             result.summary = (
                 f"采访失败：{str(e)}。模拟环境可能已关闭，请确保OASIS环境正在运行。"
             )
             return result
         except Exception as e:
-            logger.error(f"采访API调用异常: {e}")
+            logger.error(
+                f"[FALLBACK] interview_agents 返回部分结果 | "
+                f"simulation_id={simulation_id}, interview_requirement={interview_requirement[:100] if interview_requirement else None} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             import traceback
 
             logger.error(traceback.format_exc())
@@ -1619,7 +1651,12 @@ class ZepToolsService:
                 for key in ("content", "text", "body", "message", "reply"):
                     if key in data["arguments"]:
                         return str(data["arguments"][key])
-        except (json.JSONDecodeError, KeyError, TypeError):
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            logger.debug(
+                f"[FALLBACK] _clean_tool_call_response 使用正则提取 | "
+                f"response_len={len(text) if text else 0} | "
+                f"exception={type(e).__name__}: {str(e)[:100]}"
+            )
             match = _re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
             if match:
                 return match.group(1).replace("\\n", "\n").replace('\\"', '"')
@@ -1646,7 +1683,11 @@ class ZepToolsService:
                 logger.info(f"从 reddit_profiles.json 加载了 {len(profiles)} 个人设")
                 return profiles
             except Exception as e:
-                logger.warning(f"读取 reddit_profiles.json 失败: {e}")
+                logger.warning(
+                    f"[FALLBACK] _load_agent_profiles reddit_profiles.json 加载失败，尝试 twitter | "
+                    f"simulation_id={simulation_id}, path={reddit_profile_path} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
 
         # 尝试读取Twitter CSV格式
         twitter_profile_path = os.path.join(sim_dir, "twitter_profiles.csv")
@@ -1668,7 +1709,11 @@ class ZepToolsService:
                 logger.info(f"从 twitter_profiles.csv 加载了 {len(profiles)} 个人设")
                 return profiles
             except Exception as e:
-                logger.warning(f"读取 twitter_profiles.csv 失败: {e}")
+                logger.warning(
+                    f"[FALLBACK] _load_agent_profiles twitter_profiles.csv 加载失败，返回空列表 | "
+                    f"simulation_id={simulation_id}, path={twitter_profile_path} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
 
         return profiles
 
@@ -1749,7 +1794,12 @@ class ZepToolsService:
             return selected_agents, valid_indices, reasoning
 
         except Exception as e:
-            logger.warning(f"LLM选择Agent失败，使用默认选择: {e}")
+            logger.warning(
+                f"[FALLBACK] _select_agents_for_interview 使用默认选择 | "
+                f"interview_requirement={interview_requirement[:100] if interview_requirement else None}, "
+                f"profiles_count={len(profiles)}, max_agents={max_agents} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             # 降级：选择前N个
             selected = profiles[:max_agents]
             indices = list(range(min(max_agents, len(profiles))))
@@ -1799,7 +1849,12 @@ class ZepToolsService:
             )
 
         except Exception as e:
-            logger.warning(f"生成采访问题失败: {e}")
+            logger.warning(
+                f"[FALLBACK] _generate_interview_questions 使用默认问题 | "
+                f"interview_requirement={interview_requirement[:100] if interview_requirement else None}, "
+                f"agents_count={len(selected_agents)} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             return [
                 f"关于{interview_requirement}，您的观点是什么？",
                 "这件事对您或您所代表的群体有什么影响？",
@@ -1856,7 +1911,11 @@ class ZepToolsService:
             return summary
 
         except Exception as e:
-            logger.warning(f"生成采访摘要失败: {e}")
+            logger.warning(
+                f"[FALLBACK] _generate_interview_summary 使用简单拼接 | "
+                f"interviews_count={len(interviews)}, interview_requirement={interview_requirement[:100] if interview_requirement else None} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             # 降级：简单拼接
             return f"共采访了{len(interviews)}位受访者，包括：" + "、".join(
                 [i.agent_name for i in interviews]

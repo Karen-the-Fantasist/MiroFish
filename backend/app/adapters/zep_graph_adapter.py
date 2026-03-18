@@ -110,6 +110,7 @@ class ZepGraphAdapter:
             Returns:
                 创建的图谱 ID
             """
+            logger.debug(f"[CREATE_GRAPH] 入口: name={name}, graph_id={graph_id}")
             if graph_id is None:
                 graph_id = f"mirofish_{uuid.uuid4().hex[:16]}"
 
@@ -136,10 +137,13 @@ class ZepGraphAdapter:
 
             try:
                 neo4j._execute_with_retry(query, parameters)
-                logger.info(f"创建图谱: {graph_id}, 名称: {name}")
+                logger.info(f"[CREATE_GRAPH] 出口: graph_id={graph_id}, name={name}")
                 return graph_id
             except Exception as e:
-                logger.error(f"创建图谱失败: {e}")
+                logger.error(
+                    f"[CREATE_GRAPH] 失败: graph_id={graph_id}, name={name}, error={e!r}",
+                    exc_info=True,
+                )
                 raise
 
         def delete(self, graph_id: str) -> None:
@@ -151,6 +155,7 @@ class ZepGraphAdapter:
             Args:
                 graph_id: 图谱 ID
             """
+            logger.debug(f"[DELETE_GRAPH] 入口: graph_id={graph_id}")
             neo4j = self._adapter._get_neo4j()
 
             # 删除元数据节点
@@ -176,9 +181,12 @@ class ZepGraphAdapter:
                 neo4j._execute_with_retry(query_edges, {"graph_id": graph_id})
                 neo4j._execute_with_retry(query_entities, {"graph_id": graph_id})
                 neo4j._execute_with_retry(query_meta, {"graph_id": graph_id})
-                logger.info(f"删除图谱: {graph_id}")
+                logger.info(f"[DELETE_GRAPH] 出口: graph_id={graph_id}")
             except Exception as e:
-                logger.error(f"删除图谱失败: {e}")
+                logger.error(
+                    f"[DELETE_GRAPH] 失败: graph_id={graph_id}, error={e!r}",
+                    exc_info=True,
+                )
                 raise
 
         def set_ontology(
@@ -251,8 +259,11 @@ class ZepGraphAdapter:
                         f"设置图谱 {graph_id} 的本体: {len(entity_types)} 实体类型, {len(edge_types)} 边类型"
                     )
                 except Exception as e:
-                    logger.error(f"设置图谱 {graph_id} 本体失败: {e}")
-                    # 继续处理其他图谱，不中断
+                    logger.error(
+                        f"[SET_ONTOLOGY] 失败: graph_id={graph_id}, entity_types={len(entity_types)}, edge_types={len(edge_types)}, error={e!r}",
+                        exc_info=True,
+                    )
+                    raise
 
         def add(
             self,
@@ -272,31 +283,39 @@ class ZepGraphAdapter:
             Returns:
                 添加结果，包含 uuid
             """
+            logger.info(
+                f"[MEM0_ADD] 入口: graph_id={graph_id}, type={type}, data_len={len(data)}"
+            )
+
             if type != "text":
-                logger.warning(f"不支持的数据类型: {type}，将作为文本处理")
+                logger.warning(f"[MEM0_ADD] 不支持的数据类型: {type}，将作为文本处理")
 
             memory = self._adapter._get_memory()
 
             try:
-                logger.debug(
-                    f"调用 memory.add, user_id={graph_id}, data长度={len(data)}"
-                )
+                logger.debug(f"[MEM0_ADD] 调用 memory.add: user_id={graph_id}")
                 result = memory.add(
                     [{"role": "user", "content": data}],
                     user_id=graph_id,
                 )
                 logger.debug(
-                    f"memory.add 返回: {type(result)}, keys={result.keys() if isinstance(result, dict) else 'N/A'}"
+                    f"[MEM0_ADD] 原始响应: type={type(result)}, value={result!r}"
                 )
 
+                logger.debug(
+                    f"[MEM0_ADD] 解析: isinstance(result, dict)={isinstance(result, dict)}"
+                )
                 if isinstance(result, dict):
+                    logger.debug(f"[MEM0_ADD] 解析: keys={list(result.keys())}")
                     results_list = result.get("results", [])
                     relations = result.get("relations", [])
                     logger.debug(
-                        f"  results: {len(results_list)} 条, relations: {len(relations) if relations else 0} 条"
+                        f"[MEM0_ADD] 解析: results_count={len(results_list)}, relations_count={len(relations) if relations else 0}"
                     )
                     if relations:
-                        logger.debug(f"  relations 内容: {relations[:2]}...")
+                        logger.debug(
+                            f"[MEM0_ADD] 解析: relations_preview={relations[:2]}..."
+                        )
 
                 # 提取 uuid - 兼容 mem0 v1.0.0+ API 格式 {"results": [...]}
                 uuid_ = None
@@ -316,12 +335,16 @@ class ZepGraphAdapter:
                     elif hasattr(first_result, "uuid"):
                         uuid_ = first_result.uuid
 
-                logger.debug(f"添加数据到图谱 {graph_id}: {data[:50]}...")
+                uuid_final = uuid_ or str(uuid.uuid4())
+                logger.info(f"[MEM0_ADD] 出口: uuid={uuid_final}")
 
-                return {"uuid": uuid_ or str(uuid.uuid4())}
+                return {"uuid": uuid_final}
 
             except Exception as e:
-                logger.error(f"添加数据失败: {e}")
+                logger.error(
+                    f"[MEM0_ADD] 失败: graph_id={graph_id}, type={type}, data_len={len(data)}, error={e!r}",
+                    exc_info=True,
+                )
                 raise
 
         def add_batch(
@@ -340,33 +363,41 @@ class ZepGraphAdapter:
             Returns:
                 添加结果列表
             """
+            logger.info(
+                f"[MEM0_ADD_BATCH] 入口: graph_id={graph_id}, episodes_count={len(episodes)}"
+            )
             memory = self._adapter._get_memory()
             results = []
             total_relations = 0
+            total = len(episodes)
 
             for i, episode in enumerate(episodes):
                 try:
                     logger.debug(
-                        f"批量添加 [{i + 1}/{len(episodes)}]: user_id={graph_id}, data长度={len(episode.data)}"
+                        f"[MEM0_ADD_BATCH] 批次 [{i + 1}/{total}]: data_len={len(episode.data)}"
                     )
                     result = memory.add(
                         [{"role": "user", "content": episode.data}],
                         user_id=graph_id,
                     )
+                    logger.debug(
+                        f"[MEM0_ADD_BATCH] 批次 [{i + 1}] 原始响应: type={type(result)}, value={result!r}"
+                    )
 
                     if isinstance(result, dict):
                         results_list = result.get("results", [])
                         relations = result.get("relations", [])
+                        logger.debug(
+                            f"[MEM0_ADD_BATCH] 批次 [{i + 1}] 解析: results_count={len(results_list)}, relations_count={len(relations) if relations else 0}"
+                        )
                         if relations:
-                            logger.debug(f"  返回 relations: {len(relations)} 条图关系")
                             total_relations += len(relations)
 
-                    # 提取 uuid - 兼容 mem0 v1.0.0+ API 格式 {"results": [...]}
                     uuid_ = None
                     if result and isinstance(result, dict):
                         results_list = result.get("results", [])
                     elif isinstance(result, list):
-                        results_list = result  # 兼容旧版本
+                        results_list = result
                     else:
                         results_list = []
 
@@ -382,11 +413,14 @@ class ZepGraphAdapter:
                     results.append({"uuid": uuid_ or str(uuid.uuid4())})
 
                 except Exception as e:
-                    logger.error(f"批量添加中单个数据失败: {e}")
-                    results.append({"uuid": str(uuid.uuid4()), "error": str(e)})
+                    logger.error(
+                        f"[MEM0_ADD_BATCH] 批次 [{i + 1}/{total}] 失败: graph_id={graph_id}, data_len={len(episode.data)}, error={e!r}",
+                        exc_info=True,
+                    )
+                    raise
 
             logger.info(
-                f"批量添加 {len(episodes)} 条数据到图谱 {graph_id}, 共生成 {total_relations} 条图关系"
+                f"[MEM0_ADD_BATCH] 出口: results={len(results)}, total_relations={total_relations}"
             )
             return results
 
@@ -412,6 +446,9 @@ class ZepGraphAdapter:
             Returns:
                 SearchResult 包含 facts, edges, nodes
             """
+            logger.info(
+                f"[MEM0_SEARCH] 入口: graph_id={graph_id}, query={query[:50]}..., limit={limit}, scope={scope}"
+            )
             memory = self._adapter._get_memory()
             neo4j = self._adapter._get_neo4j()
 
@@ -420,16 +457,30 @@ class ZepGraphAdapter:
             nodes = []
 
             try:
-                # mem0 搜索
+                logger.debug(
+                    f"[MEM0_SEARCH] 调用 memory.search: user_id={graph_id}, limit={limit}"
+                )
                 search_result = memory.search(query, user_id=graph_id, limit=limit)
+                logger.debug(
+                    f"[MEM0_SEARCH] 原始响应: type={type(search_result)}, value={search_result!r}"
+                )
 
-                # 解析搜索结果 - 兼容 mem0 v1.0.0+ API 格式 {"results": [...]}
                 if search_result and isinstance(search_result, dict):
+                    logger.debug(
+                        f"[MEM0_SEARCH] 解析: keys={list(search_result.keys())}"
+                    )
                     results_list = search_result.get("results", [])
+                    logger.debug(
+                        f"[MEM0_SEARCH] 解析: results_count={len(results_list)}"
+                    )
                 elif isinstance(search_result, list):
-                    results_list = search_result  # 兼容旧版本
+                    results_list = search_result
+                    logger.debug(f"[MEM0_SEARCH] 解析: list_count={len(results_list)}")
                 else:
                     results_list = []
+                    logger.debug(
+                        f"[MEM0_SEARCH] 解析: empty_or_unknown_type, results_count=0"
+                    )
 
                 for item in results_list:
                     fact_data = {
@@ -440,22 +491,24 @@ class ZepGraphAdapter:
                     }
                     facts.append(fact_data)
 
-                # 从 Neo4j 获取相关的边和节点
                 if scope in ("edges", "both"):
                     edges = self._get_related_edges(neo4j, graph_id, facts[:limit])
 
                 if scope in ("nodes", "both"):
                     nodes = self._get_related_nodes(neo4j, graph_id, facts[:limit])
 
-                logger.debug(
-                    f"搜索图谱 {graph_id}: {len(facts)} 条事实, {len(edges)} 条边, {len(nodes)} 个节点"
+                logger.info(
+                    f"[MEM0_SEARCH] 出口: facts={len(facts)}, edges={len(edges)}, nodes={len(nodes)}"
                 )
 
                 return SearchResult(facts=facts, edges=edges, nodes=nodes)
 
             except Exception as e:
-                logger.error(f"搜索失败: {e}")
-                return SearchResult(facts=[], edges=[], nodes=[])
+                logger.error(
+                    f"[MEM0_SEARCH] 失败: graph_id={graph_id}, query={query}, limit={limit}, error={e!r}",
+                    exc_info=True,
+                )
+                raise
 
         def _get_related_edges(
             self,
@@ -520,8 +573,11 @@ class ZepGraphAdapter:
                 return edges
 
             except Exception as e:
-                logger.error(f"获取相关边失败: {e}")
-                return []
+                logger.error(
+                    f"[MEM0_GET_EDGES] 失败: graph_id={graph_id}, facts_count={len(facts)}, error={e!r}",
+                    exc_info=True,
+                )
+                raise
 
         def _get_related_nodes(
             self,
@@ -582,8 +638,11 @@ class ZepGraphAdapter:
                 return nodes
 
             except Exception as e:
-                logger.error(f"获取相关节点失败: {e}")
-                return []
+                logger.error(
+                    f"[MEM0_GET_NODES] 失败: graph_id={graph_id}, facts_count={len(facts)}, error={e!r}",
+                    exc_info=True,
+                )
+                raise
 
     class _Node:
         """Node 子接口。"""
@@ -639,8 +698,10 @@ class ZepGraphAdapter:
                 )
 
             except Exception as e:
-                logger.error(f"获取节点失败: {e}")
-                return None
+                logger.error(
+                    f"[MEM0_NODE_GET] 失败: uuid={uuid_}, error={e!r}", exc_info=True
+                )
+                raise
 
         def get_by_graph_id(
             self,

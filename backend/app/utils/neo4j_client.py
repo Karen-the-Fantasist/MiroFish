@@ -134,13 +134,19 @@ class Neo4jClient:
                 last_exception = e
                 if attempt < max_retries - 1:
                     logger.warning(
-                        f"Neo4j 查询重试 {attempt + 1}/{max_retries}: {str(e)[:100]}, "
-                        f"{delay:.1f}s 后重试..."
+                        f"[FALLBACK] _execute_with_retry 重试中 | "
+                        f"attempt={attempt + 1}/{max_retries}, query={query[:100] if query else None}, "
+                        f"parameters={list(parameters.keys()) if parameters else []} | "
+                        f"exception={type(e).__name__}: {str(e)[:200]}"
                     )
                     time.sleep(delay)
                     delay *= 2
                 else:
-                    logger.error(f"Neo4j 查询失败，已重试 {max_retries} 次: {e}")
+                    logger.error(
+                        f"[FALLBACK] _execute_with_retry 最终失败 | "
+                        f"max_retries={max_retries}, query={query[:100] if query else None} | "
+                        f"exception={type(e).__name__}: {str(e)[:200]}"
+                    )
             except AuthError as e:
                 # 认证错误不重试
                 logger.error(f"Neo4j 认证失败: {e}")
@@ -161,7 +167,11 @@ class Neo4jClient:
                 record = result.single()
                 return record is not None and record["test"] == 1
         except Exception as e:
-            logger.error(f"Neo4j 连接测试失败: {e}")
+            logger.error(
+                f"[FALLBACK] test_connection 返回 False | "
+                f"url={self._url}, username={self._username} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
             return False
 
     def fetch_all_nodes(
@@ -182,6 +192,9 @@ class Neo4jClient:
         Returns:
             EntityNode 列表
         """
+        logger.debug(
+            f"[NEO4J_FETCH_NODES] 入口: graph_id={graph_id}, limit={limit}, cursor={cursor}, page_size={page_size}"
+        )
         all_nodes: list[EntityNode] = []
         current_cursor = cursor
         page_num = 0
@@ -243,7 +256,9 @@ class Neo4jClient:
             if len(records) < page_size:
                 break
 
-        logger.info(f"获取图谱 {graph_id} 的节点: {len(all_nodes)} 个")
+        logger.info(
+            f"[NEO4J_FETCH_NODES] 出口: graph_id={graph_id}, nodes={len(all_nodes)}, pages={page_num}"
+        )
         return all_nodes[:limit]
 
     def fetch_all_edges(
@@ -264,6 +279,9 @@ class Neo4jClient:
         Returns:
             EdgeInfo 列表
         """
+        logger.debug(
+            f"[NEO4J_FETCH_EDGES] 入口: graph_id={graph_id}, limit={limit}, cursor={cursor}, page_size={page_size}"
+        )
         all_edges: list[EdgeInfo] = []
         current_cursor = cursor
         page_num = 0
@@ -337,7 +355,9 @@ class Neo4jClient:
             if len(records) < page_size:
                 break
 
-        logger.info(f"获取图谱 {graph_id} 的边: {len(all_edges)} 条")
+        logger.info(
+            f"[NEO4J_FETCH_EDGES] 出口: graph_id={graph_id}, edges={len(all_edges)}, pages={page_num}"
+        )
         return all_edges[:limit]
 
     def get_entity_edges(self, node_uuid: str) -> list[dict[str, Any]]:

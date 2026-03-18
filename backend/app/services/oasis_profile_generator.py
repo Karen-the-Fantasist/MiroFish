@@ -237,7 +237,11 @@ class OasisProfileGenerator:
         try:
             self.zep_client = ZepGraphAdapter()
         except Exception as e:
-            logger.warning(f"ZepGraphAdapter初始化失败: {e}")
+            logger.warning(
+                f"[FALLBACK] __init__ ZepGraphAdapter init failure fallback | "
+                f"setting zep_client=None | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
 
     def generate_profile_from_entity(
         self, entity: EntityNode, user_id: int, use_llm: bool = True
@@ -445,9 +449,17 @@ class OasisProfileGenerator:
             )
 
         except concurrent.futures.TimeoutError:
-            logger.warning(f"Zep检索超时 ({entity_name})")
+            logger.warning(
+                f"[FALLBACK] _search_zep_for_entity timeout fallback | "
+                f"entity_name={entity_name} | "
+                f"returning partial results"
+            )
         except Exception as e:
-            logger.warning(f"Zep检索失败 ({entity_name}): {e}")
+            logger.warning(
+                f"[FALLBACK] _search_zep_for_entity exception fallback | "
+                f"entity_name={entity_name} | "
+                f"exception={type(e).__name__}: {str(e)[:200]}"
+            )
 
         return results
 
@@ -621,7 +633,9 @@ class OasisProfileGenerator:
 
                 except json.JSONDecodeError as je:
                     logger.warning(
-                        f"JSON解析失败 (attempt {attempt + 1}): {str(je)[:80]}"
+                        f"[FALLBACK] _generate_profile_with_llm JSON decode fallback | "
+                        f"entity_name={entity_name}, attempt={attempt + 1}/{max_attempts} | "
+                        f"exception={type(je).__name__}: {str(je)[:200]}"
                     )
 
                     # 尝试修复JSON
@@ -635,7 +649,11 @@ class OasisProfileGenerator:
                     last_error = je
 
             except Exception as e:
-                logger.warning(f"LLM调用失败 (attempt {attempt + 1}): {str(e)[:80]}")
+                logger.warning(
+                    f"[FALLBACK] _generate_profile_with_llm LLM call failure fallback | "
+                    f"entity_name={entity_name}, attempt={attempt + 1}/{max_attempts} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
                 last_error = e
                 import time
 
@@ -715,8 +733,12 @@ class OasisProfileGenerator:
                     result = json.loads(json_str)
                     result["_fixed"] = True
                     return result
-                except:
-                    pass
+                except Exception:
+                    logger.debug(
+                        f"[FALLBACK] _try_fix_json aggressive repair fallback | "
+                        f"entity_name={entity_name} | "
+                        f"json repair failed, returning None"
+                    )
 
         # 6. 尝试从内容中提取部分信息
         bio_match = re.search(r'"bio"\s*:\s*"([^"]*)"', content)
@@ -1027,7 +1049,11 @@ class OasisProfileGenerator:
                                 writer.writeheader()
                                 writer.writerows(profiles_data)
                 except Exception as e:
-                    logger.warning(f"实时保存 profiles 失败: {e}")
+                    logger.warning(
+                        f"[FALLBACK] save_profiles_realtime save failure fallback | "
+                        f"realtime_output_path={realtime_output_path}, output_platform={output_platform} | "
+                        f"exception={type(e).__name__}: {str(e)[:200]}"
+                    )
 
         def generate_single_profile(idx: int, entity: EntityNode) -> tuple:
             """生成单个profile的工作函数"""
@@ -1044,7 +1070,11 @@ class OasisProfileGenerator:
                 return idx, profile, None
 
             except Exception as e:
-                logger.error(f"生成实体 {entity.name} 的人设失败: {str(e)}")
+                logger.error(
+                    f"[FALLBACK] generate_single_profile profile generation failure fallback | "
+                    f"entity_name={entity.name}, entity_type={entity_type}, idx={idx} | "
+                    f"exception={type(e).__name__}: {str(e)[:200]}"
+                )
                 # 创建一个基础profile
                 fallback_profile = OasisAgentProfile(
                     user_id=idx,
@@ -1105,7 +1135,11 @@ class OasisProfileGenerator:
                         )
 
                 except Exception as e:
-                    logger.error(f"处理实体 {entity.name} 时发生异常: {str(e)}")
+                    logger.error(
+                        f"[FALLBACK] generate_profiles_from_entities entity processing exception fallback | "
+                        f"entity_name={entity.name}, entity_type={entity_type}, idx={idx} | "
+                        f"exception={type(e).__name__}: {str(e)[:200]}"
+                    )
                     with lock:
                         completed_count[0] += 1
                     profiles[idx] = OasisAgentProfile(
